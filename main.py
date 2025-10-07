@@ -52,79 +52,71 @@ def root():
     return {"message": "Halo, ini adalah pesan halaman root!"}
 
 @app.get('/data-training')
-async def get_data_training():
+def get_data_training():
     return get_all("SELECT * FROM tb_data WHERE Jenis='Training'")
 
 @app.get('/data-testing')
-async def get_data_testing():
+def get_data_testing():
     return get_all("SELECT * FROM tb_data WHERE Jenis='Testing'")
 
 @app.get('/classification-result')
-async def get_classification(p1: int, p2: int, p3: int):
+def get_classification(p1: str, p2: str, p3: str):
     columns = [
-        "kd_data","D1","D2","D3","D4","D5","D6","D7",
-        "A1","A2","A3","A4","A5","A6","A7",
-        "S1","S2","S3","S4","S5","S6","S7","P1","P2","P3","Kelas","Jenis"
+        "kd_data", "D1", "D2", "D3", "D4", "D5", "D6", "D7",
+        "A1", "A2", "A3", "A4", "A5", "A6", "A7",
+        "S1", "S2", "S3", "S4", "S5", "S6", "S7",
+        "P1", "P2", "P3", "Kelas", "Jenis"
     ]
 
     data_training = get_all("SELECT * FROM tb_data WHERE Jenis='Training'")
     data_testing  = get_all("SELECT * FROM tb_data WHERE Jenis='Testing'")
 
     df_train = pd.DataFrame(data_training, columns=columns)
-    df_test  = pd.DataFrame(data_testing,  columns=columns)
+    df_test  = pd.DataFrame(data_testing, columns=columns)
 
-    # 1) Pastikan tidak ada NaN di kolom fitur P1-P3
-    df_train[['P1','P2','P3']] = df_train[['P1','P2','P3']].fillna("Unknown").astype(str)
-    df_test[['P1','P2','P3']]  = df_test[['P1','P2','P3']].fillna("Unknown").astype(str)
+    for col in ['P1', 'P2', 'P3']:
+        df_train[col] = df_train[col].astype(str).str.lower()
+        df_test[col]  = df_test[col].astype(str).str.lower()
 
-    # 2) Encode label (target)
     le_kelas = LabelEncoder()
-    df_train["Kelas"] = le_kelas.fit_transform(df_train["Kelas"].fillna("Unknown").astype(str))
-    df_test["Kelas"]  = le_kelas.transform(df_test["Kelas"].fillna("Unknown").astype(str))
+    df_train["Kelas"] = le_kelas.fit_transform(df_train["Kelas"])
+    df_test["Kelas"]  = le_kelas.transform(df_test["Kelas"])
 
-    # 3) Pisahkan fitur dan label (pastikan X bertipe str jika kategorikal)
-    x_train = df_train[['P1','P2','P3']].astype(str)
+    x_train = df_train[['P1', 'P2', 'P3']]
     y_train = df_train['Kelas']
-    x_test  = df_test[['P1','P2','P3']].astype(str)
-    y_test  = df_test['Kelas']
+    x_test = df_test[['P1', 'P2', 'P3']]
+    y_test = df_test['Kelas']
 
-    # DEBUG - optional (hapus di production)
-    # print("x_train dtypes:\n", x_train.dtypes)
-    # print("sample x_train:\n", x_train.head())
-
-    # 4) OneHotEncoder (fit hanya di training)
     encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-    x_train_enc = np.asarray(encoder.fit_transform(x_train), dtype=float)
-    x_test_enc  = np.asarray(encoder.transform(x_test), dtype=float)
+    x_train_enc = encoder.fit_transform(x_train)
+    x_test_enc = encoder.transform(x_test)
 
-    # 5) Train model
     nb_model = MultinomialNB(alpha=1.0)
     nb_model.fit(x_train_enc, y_train)
 
-    # 6) Prepare input baru -> pakai DataFrame dan cast ke str agar sama bentuknya
-    test_df = pd.DataFrame([[p1, p2, p3]], columns=['P1','P2','P3']).astype(str).fillna("Unknown")
-    testing_enc = np.asarray(encoder.transform(test_df), dtype=float)
-    print(test_df)
+    testing_raw = pd.DataFrame([[p1, p2, p3]], columns=['P1', 'P2', 'P3'])
+    for col in testing_raw.columns:
+        testing_raw[col] = testing_raw[col].astype(str).str.lower()
+    testing_enc = encoder.transform(testing_raw)
 
-    # 7) Predict
-    y_pred_new = nb_model.predict(testing_enc)[0]
-    proba = nb_model.predict_proba(testing_enc)[0]
-    confidence = float(max(proba))
+    y_pred_nb = nb_model.predict(testing_enc)[0]
 
-    # 8) Eval on test set (pastikan types numeric)
+    kelas_map = {i: label for i, label in enumerate(le_kelas.classes_)}
+    prediksi = kelas_map[y_pred_nb]
+
+    y_proba = nb_model.predict_proba(testing_enc)[0]
+    confidence = float(max(y_proba))
+
     y_pred_test = nb_model.predict(x_test_enc)
-    akurasi = float(accuracy_score(y_test, y_pred_test))
-
-    # 9) Map predicted label back to original label string
-    result_label = le_kelas.inverse_transform([y_pred_new])[0]
+    akurasi = accuracy_score(y_test, y_pred_test)
 
     return {
         "P1": p1,
         "P2": p2,
         "P3": p3,
-        "result": result_label,
         "confidence": confidence,
-        "akurasi": round(akurasi, 4)
+        "akurasi": akurasi,
+        "result": prediksi
     }
 
 @app.api_route("/split-data", methods=["GET", "POST"])
@@ -306,32 +298,32 @@ def get_confusion_matrix_metrics():
     df_train = pd.DataFrame(data_training, columns=columns)
     df_test  = pd.DataFrame(data_testing, columns=columns)
 
-    # --- Pastikan fitur kategorikal bersih ---
+    # Pastikan fitur kategorikal bersih
     df_train[['P1','P2','P3']] = df_train[['P1','P2','P3']].fillna("Unknown").astype(str)
     df_test[['P1','P2','P3']]  = df_test[['P1','P2','P3']].fillna("Unknown").astype(str)
 
-    # --- Encode label target ---
+    # Encode label target
     le_kelas = LabelEncoder()
     df_train['Kelas'] = le_kelas.fit_transform(df_train['Kelas'])
     df_test['Kelas']  = le_kelas.transform(df_test['Kelas'])
 
-    # --- Split fitur dan label ---
+    # Split fitur dan label
     x_train = df_train[['P1','P2','P3']]
     y_train = df_train['Kelas']
     x_test  = df_test[['P1','P2','P3']]
     y_test  = df_test['Kelas']
 
-    # --- One-Hot Encoding ---
+    # One-Hot Encoding
     encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
     x_train_enc = encoder.fit_transform(x_train)
     x_test_enc  = encoder.transform(x_test)
 
-    # --- Model ---
+    # Model
     nb_model = MultinomialNB(alpha=1.0)
     nb_model.fit(x_train_enc, y_train)
     y_pred = nb_model.predict(x_test_enc)
 
-    # --- Confusion Matrix ---
+    # Confusion Matrix
     cm = confusion_matrix(y_test, y_pred)
     class_names = le_kelas.classes_
 
@@ -373,7 +365,7 @@ def get_model_experiment(split_percentage: float = 0.2):
         stratify=df['Kelas']
     )
 
-    # One-hot encoding fitur kategorikal
+    # One-hot encoding parameter kategorial
     onehot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
     onehot_encoder.fit(df[['P1', 'P2', 'P3']])
     x_train_enc = onehot_encoder.transform(x_train)
