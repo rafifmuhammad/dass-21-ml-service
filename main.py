@@ -239,19 +239,10 @@ def get_confusion_matrix_actual_vs_predicted():
     df_train = pd.DataFrame(data_training, columns=columns)
     df_test = pd.DataFrame(data_testing, columns=columns)
 
-    # Label Encoding untuk fitur P1-P3
-    target_columns = ['P1', 'P2', 'P3']
-    label_column = 'Kelas'
-
-    for col in target_columns:
-        le = LabelEncoder()
-        df_train[col] = le.fit_transform(df_train[col])
-        df_test[col] = le.transform(df_test[col])
-
     # Encode label (kelas)
     le_kelas = LabelEncoder()
-    df_train[label_column] = le_kelas.fit_transform(df_train[label_column])
-    df_test[label_column] = le_kelas.transform(df_test[label_column])
+    df_train['Kelas'] = le_kelas.fit_transform(df_train['Kelas'])
+    df_test['Kelas'] = le_kelas.transform(df_test['Kelas'])
 
     # Pisahkan fitur dan label
     x_train = df_train[['P1', 'P2', 'P3']]
@@ -271,7 +262,7 @@ def get_confusion_matrix_actual_vs_predicted():
     # Prediksi
     y_pred = nb_model.predict(x_test_enc)
 
-    # Buat confusion matrix
+    # Confusion matrix
     cm = confusion_matrix(y_test, y_pred)
     class_names = le_kelas.classes_
 
@@ -368,7 +359,7 @@ def get_model_experiment(split_percentage: float = 0.2):
     # One-hot encoding parameter kategorial
     onehot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
     onehot_encoder.fit(df[['P1', 'P2', 'P3']])
-    x_train_enc = onehot_encoder.transform(x_train)
+    x_train_enc = onehot_encoder.fit_transform(x_train)
     x_test_enc = onehot_encoder.transform(x_test)
 
     # Model K-NN
