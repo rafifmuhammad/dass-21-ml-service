@@ -10,7 +10,7 @@ from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.model_selection import train_test_split
 from imblearn.over_sampling import SMOTE
 from collections import Counter
-from sklearn.naive_bayes import MultinomialNB
+from sklearn.naive_bayes import MultinomialNB, GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
@@ -189,7 +189,7 @@ def model_evaluation():
     x_train_enc = encoder.fit_transform(x_train)
     x_test_enc = encoder.transform(x_test)
 
-    # Model Naive Bayes
+    # Model Naive Bayes 
     nb_model = MultinomialNB(alpha=1.0)
     nb_model.fit(x_train_enc, y_train)
 
@@ -329,7 +329,7 @@ def get_confusion_matrix_metrics():
     return result
 
 @app.api_route('/model-experiment')
-def get_model_experiment(split_percentage: float = 0.2):
+def get_model_experiment(split_percentage: float = 0.2, smote: bool = False):
     columns = [
         "kd_data", "D1", "D2", "D3", "D4", "D5", "D6", "D7",
         "A1", "A2", "A3", "A4", "A5", "A6", "A7",
@@ -362,25 +362,48 @@ def get_model_experiment(split_percentage: float = 0.2):
     x_train_enc = onehot_encoder.fit_transform(x_train)
     x_test_enc = onehot_encoder.transform(x_test)
 
-    # Model K-NN
-    knn_model = KNeighborsClassifier(n_neighbors=3)
-    knn_model.fit(x_train_enc, y_train)
-    y_pred_knn = knn_model.predict(x_test_enc)
+    if (smote):
+        smote = SMOTE(random_state=42)
+        x_train_res, y_train_res = smote.fit_resample(x_train_enc, y_train)
+        # Model K-NN
+        knn_model = KNeighborsClassifier(n_neighbors=3)
+        knn_model.fit(x_train_res, y_train_res)
+        y_pred_knn = knn_model.predict(x_test_enc)
+        
+        # Model Decision Tree
+        tree_model = DecisionTreeClassifier(random_state=42, class_weight='balanced')
+        tree_model.fit(x_train_res, y_train_res)
+        y_pred_tree = tree_model.predict(x_test_enc)
 
-    # Model Decision Tree
-    tree_model = DecisionTreeClassifier(random_state=42, class_weight='balanced')
-    tree_model.fit(x_train_enc, y_train)
-    y_pred_tree = tree_model.predict(x_test_enc)
+        # Model Naive Bayes
+        nb_model = MultinomialNB(alpha=1.0)
+        nb_model.fit(x_train_res, y_train_res)
+        y_pred_nb = nb_model.predict(x_test_enc)
 
-    # Model Naive Bayes
-    nb_model = MultinomialNB(alpha=1.0)
-    nb_model.fit(x_train_enc, y_train)
-    y_pred_nb = nb_model.predict(x_test_enc)
+        # Model SVM
+        svm_model = SVC(kernel='linear', probability=True, class_weight='balanced', random_state=42)
+        svm_model.fit(x_train_res, y_train_res)
+        y_pred_svm = svm_model.predict(x_test_enc)
+    else:
+        # Model K-NN
+        knn_model = KNeighborsClassifier(n_neighbors=3)
+        knn_model.fit(x_train_enc, y_train)
+        y_pred_knn = knn_model.predict(x_test_enc)
+        
+        # Model Decision Tree
+        tree_model = DecisionTreeClassifier(random_state=42, class_weight='balanced')
+        tree_model.fit(x_train_enc, y_train)
+        y_pred_tree = tree_model.predict(x_test_enc)
 
-    # Model SVM
-    svm_model = SVC(kernel='linear', probability=True, class_weight='balanced', random_state=42)
-    svm_model.fit(x_train_enc, y_train)
-    y_pred_svm = svm_model.predict(x_test_enc)
+        # Model Naive Bayes
+        nb_model = MultinomialNB(alpha=1.0)
+        nb_model.fit(x_train_enc, y_train)
+        y_pred_nb = nb_model.predict(x_test_enc)
+
+        # Model SVM
+        svm_model = SVC(kernel='linear', probability=True, class_weight='balanced', random_state=42)
+        svm_model.fit(x_train_enc, y_train)
+        y_pred_svm = svm_model.predict(x_test_enc)
 
     # Fungsi untuk menghitung metrik
     def get_value(metric, y_pred):
